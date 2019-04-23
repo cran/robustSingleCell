@@ -23,10 +23,10 @@ get.variable.genes <- function(environment, min.mean = 0.05, min.frac.cells = 0,
     } else {
         print.message("Computing")
         t <- start(file.path(environment$work.path, "tracking"))
-
+        on.exit(end(t))
         normalized <- environment$normalized
 
-        datasets <- environment$datasets
+        datasets <- environment$dataset_ids
         table(datasets)
         dataset <- sort(unique(datasets))[1]
         dataset
@@ -90,8 +90,6 @@ get.variable.genes <- function(environment, min.mean = 0.05, min.frac.cells = 0,
         print(genes[genes %in% HVG])
 
         saveRDS(HVG, file = cache)
-
-        end(t)
     }
 
     environment$HVG <- HVG
@@ -118,8 +116,10 @@ nGenes <- function() {
 #' @return \code{environment} parameter containing added confounder variable
 #' @export
 #' @examples
+#' \donttest{
 #' LCMV1 <- setup_LCMV_example()
 #' LCMV1 <- add.confounder.variables(LCMV1, ribosomal.score = ribosomal.score(LCMV1))
+#' }
 add.confounder.variables <- function(environment, ...) {
     environment$confounders <- data.frame(environment$confounders, data.frame(...))
     print(utils::head(environment$confounders))
@@ -140,6 +140,7 @@ add.confounder.variables <- function(environment, ...) {
 #' ribosomal.score <- ribosomal.score(LCMV1)
 ribosomal.score <- function(environment, control = T, knn = 10) {
     t <- start(file.path(environment$work.path, "tracking"))
+    on.exit(end(t))
     genes <- get.ribo.genes(environment$genes)
     print.message("Using genes:")
     print(genes)
@@ -148,8 +149,7 @@ ribosomal.score <- function(environment, control = T, knn = 10) {
     } else {
         score <- colMeans(environment$normalized[genes, ])
     }
-    end(t)
-    return(score)
+    score
 }
 
 get.ribo.genes <- function(genes) {
@@ -171,6 +171,7 @@ get.ribo.genes <- function(genes) {
 mitochondrial.score <- function(environment, control = F, knn = 10) {
     # browser()
     t <- start(file.path(environment$work.path, "tracking"))
+    on.exit(end(t))
     genes <- get.mito.genes(environment$genes)
     print.message("Using genes:")
     print(genes)
@@ -180,7 +181,6 @@ mitochondrial.score <- function(environment, control = F, knn = 10) {
         score <- Matrix::colMeans(environment$normalized[genes %in% rownames(environment$normalized),
             ])
     }
-    end(t)
     return(score)
 }
 
@@ -198,10 +198,13 @@ get.mito.genes <- function(genes) {
 #' @return a matrix of cell cycle genes activation scores (S, G2M and aggregated S/G2M scores, separately)
 #' @export
 #' @examples
+#' \donttest{
 #' LCMV1 <- setup_LCMV_example()
 #' cell.cycle.score <- cell.cycle.score(LCMV1)
+#' }
 cell.cycle.score <- function(environment, knn = 10, cc.genes.path = NA) {
     t <- start(file.path(environment$work.path, "tracking"))
+    on.exit(end(t))
 
     if (is.na(cc.genes.path)) {
         cc.genes <- capwords(cell_cycle_genes)
@@ -224,7 +227,6 @@ cell.cycle.score <- function(environment, knn = 10, cc.genes.path = NA) {
     print.message("# s.score > 0:", sum(s.score > 0), "fraction", sum(s.score > 0)/length(s.score))
     print.message("# g2m.score > 0:", sum(g2m.score > 0), "fraction", sum(g2m.score >
         0)/length(g2m.score))
-    end(t)
 
     return(data.frame(S.stage = s.score, G2M.stage = g2m.score, aggregate_S_G2M.stage = cell.cycle.score))
 }
@@ -241,10 +243,12 @@ cell.cycle.score <- function(environment, knn = 10, cc.genes.path = NA) {
 #' @return gene signature activation scores per cell
 #' @export
 #' @examples
+#' \donttest{
 #' LCMV1 <- setup_LCMV_example()
 #' exhaustion_markers <- c('Pdcd1', 'Cd244', 'Havcr2', 'Ctla4', 'Cd160', 'Lag3',
 #' 'Tigit', 'Cd96')
 #' Exhaustion <- controlled.mean.score(LCMV1, exhaustion_markers)
+#' }
 controlled.mean.score <- function(environment, genes, knn = 10, exclude.missing.genes = T,
     constrain.cell.universe = NA) {
     # similarly to
@@ -279,6 +283,8 @@ controlled.mean.score <- function(environment, genes, knn = 10, exclude.missing.
 get.technically.similar.genes <- function(environment, knn = 10) {
 
     t <- start(file.path(environment$work.path, "tracking"))
+    on.exit(t)
+
     cache <- file.path(environment$baseline.data.path, paste(knn, "technical.background.genes.distances.rds",
         sep = "."))
 
@@ -306,7 +312,6 @@ get.technically.similar.genes <- function(environment, knn = 10) {
         }
         saveRDS(list(knns = knns, technical.variables = technical.variables), file = cache)
     }
-    end(t)
 
     return(list(knns = knns, technical.variables = technical.variables))
 }
@@ -330,6 +335,7 @@ get_dist <- function(dist_obj, i, n, names) {
 background.genes <- function(environment, foreground.genes, knn) {
 
     t <- start(file.path(environment$work.path, "tracking"))
+    on.exit(end(t))
     foreground.genes <- foreground.genes[foreground.genes %in% environment$genes]
     technically.similar.genes <- get.technically.similar.genes(environment, knn)
     knns <- technically.similar.genes$knns
@@ -342,7 +348,6 @@ background.genes <- function(environment, foreground.genes, knn) {
     print(utils::head(technical.variables[background.genes, ]))
     print.message("background.genes")
     print(background.genes)
-    end(t)
     return(background.genes)
 }
 
@@ -357,7 +362,7 @@ regress.covariates <- function(environment, regress, data, groups, rerun = F, sa
     } else {
         print.message("Computing")
         t <- start(file.path(environment$work.path, "tracking"))
-
+        on.exit(end(t))
         formula.str <- paste("gene", paste(colnames(regress), collapse = " + "),
             sep = " ~ ")
         formula <- stats::as.formula(formula.str)
@@ -378,7 +383,6 @@ regress.covariates <- function(environment, regress, data, groups, rerun = F, sa
         }
         if (save)
             saveRDS(corrected, file = cache)
-        end(t)
     }
 
     return(corrected)
@@ -396,6 +400,9 @@ regress.covariates <- function(environment, regress, data, groups, rerun = F, sa
 #' @param contrast either 'all' indicating differential expression between one cluster against all others or 'datasets' indicating differential expression analysis comparing one cluster to all other within each dataset separately ('datasets' should be used in pooled analysis for optimal results)
 #' @param min.fold minimum fold change for filtering final differentially expressed gene lists
 #' @param quantile q-value cutoff for differential expression analysis
+#' @param local Whether to run tSNE locally on SLURM
+#' @param mem Memory for each job; default 4 GB
+#' @param time Time for each job; default 15 minutes
 #' @export
 #' @examples
 #' \donttest{
@@ -408,15 +415,14 @@ regress.covariates <- function(environment, regress, data, groups, rerun = F, sa
 #' summarize(LCMV1)
 #' }
 summarize <- function(environment, perplexity = seq(10, 30, 10), max_iter = 10000,
-    rerun = F, order = NA, contrast = "all", min.fold = 1.5, quantile = 0.95) {
+    rerun = F, order = NA, contrast = "all", min.fold = 1.5, quantile = 0.95,
+    local = F, mem = "4GB", time = "0:15:00") {
 
-    if (check_not_slurm("summarize")) {
-        return()
-    }
     cluster.size <- table(environment$cluster.names)
     if (length(order) == 1 && is.na(order))
         order <- names(cluster.size)[order(cluster.size, decreasing = T)]
-    tSNE.job <- run_tSNE(environment, perplexity, max_iter, rerun)
+    tSNE.job <- run_tSNE(environment, perplexity, max_iter, rerun, local = local,
+                         mem = mem, time = time)
     plot_PCA(environment, quantile = 0.05, order)
     plot.cluster.stats(environment, membership = environment$cluster.names, order = order)
     if (length(environment$seurat.cluster.association) > 1)

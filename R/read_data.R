@@ -62,6 +62,7 @@ read.data <- function(environment, genome = "mm10", min.genes.per.cell = 500, ma
         counts <- precomputed$counts
         normalized <- precomputed$normalized
         dataset.labels <- precomputed$dataset.labels
+        dataset_ids <- precomputed$dataset_ids
         origins <- precomputed$origins
         experiments <- precomputed$experiments
         criteria <- precomputed$criteria
@@ -70,6 +71,7 @@ read.data <- function(environment, genome = "mm10", min.genes.per.cell = 500, ma
 
         print.message("Computing")
         t <- start(file.path(environment$work.path, "tracking"))
+        on.exit(end(t))
 
         merged <- NA
         dataset <- environment$datasets[1]
@@ -96,12 +98,12 @@ read.data <- function(environment, genome = "mm10", min.genes.per.cell = 500, ma
 
             colnames(measurements) <- rep(environment$datasets[environment$datasets ==
                 dataset], ncol(measurements))
-            dataset.labels <- rep(paste(environment$origins[environment$datasets ==
-                dataset], " (", environment$experiments[environment$datasets == dataset],
+            dataset.labels <- rep(paste(unique(environment$origins)[environment$datasets ==
+                dataset], " (", unique(environment$experiments)[environment$datasets == dataset],
                 ")", sep = ""), ncol(measurements))
-            origins <- rep(environment$origins[environment$datasets == dataset],
+            origins <- rep(unique(environment$origins)[environment$datasets == dataset],
                 ncol(measurements))
-            experiments <- rep(environment$experiments[environment$datasets == dataset],
+            experiments <- rep(unique(environment$experiments)[environment$datasets == dataset],
                 ncol(measurements))
             cat(dim(measurements))
             # corner(measurements) measurements = measurements[,measurements['Cd4',]>0]
@@ -281,6 +283,7 @@ read.data <- function(environment, genome = "mm10", min.genes.per.cell = 500, ma
         corner(normalized)
 
         t <- start(file.path(environment$work.path, "tracking"), append = T, split = T)
+        on.exit(end(t), add = T)
         duplicated.indices <- duplicated(t(counts[genes.filter, ])) | duplicated(t(counts[genes.filter,
             ]), fromLast = T)
         if (sum(duplicated.indices) > 0) {
@@ -293,13 +296,11 @@ read.data <- function(environment, genome = "mm10", min.genes.per.cell = 500, ma
             experiments <- experiments[!duplicated.indices]
             criteria[criteria == T][duplicated.indices] <- FALSE
         }
-        end(t)
 
         saveRDS(list(genes.filter = genes.filter, counts = counts, normalized = normalized,
-            dataset.labels = dataset.labels, origins = origins, experiments = experiments,
+            dataset.labels = dataset.labels, dataset_ids = colnames(normalized), origins = origins, experiments = experiments,
             criteria = criteria), file = cache)
 
-        end(t)
     }
 
     counts <- counts[genes.filter, ]
@@ -309,7 +310,7 @@ read.data <- function(environment, genome = "mm10", min.genes.per.cell = 500, ma
     environment$counts <- counts
     environment$normalized <- normalized
     environment$genes <- rownames(normalized)
-    environment$datasets <- colnames(normalized)
+    environment$dataset_ids <- colnames(normalized)
     environment$dataset.labels <- dataset.labels
     environment$origins <- origins
     environment$experiments <- experiments
@@ -365,9 +366,6 @@ read.data <- function(environment, genome = "mm10", min.genes.per.cell = 500, ma
 #' }
 read.preclustered.datasets <- function(environment, path = NA, recursive = T, rerun = F) {
 
-    if (check_not_slurm("read.preclustered.datasets")) {
-        return(environment)
-    }
     cache <- file.path(environment$baseline.data.path, "preclustered.datasets.rds")
 
     if (!rerun & file.exists(cache)) {
@@ -379,19 +377,24 @@ read.preclustered.datasets <- function(environment, path = NA, recursive = T, re
         genes.filter <- precomputed$genes.filter
         dataset.labels <- precomputed$dataset.labels
         origins <- precomputed$origins
-        experiments <- precomputed$origins
+        origin_id <- precomputed$origin_id
+        experiments <- precomputed$experiments
         clustering <- precomputed$clustering
         merged.original.clustering <- precomputed$merged.original.clustering
         merged.diff.exp <- precomputed$merged.diff.exp
         cluster.names <- precomputed$cluster.names
+        dataset_ids <- precomputed$dataset_ids
         rm(precomputed)
     } else {
 
         print.message("Computing")
         t <- start(file.path(environment$work.path, "tracking"), split = T)
-
+        on.exit(end(t))
         if (is.na(path))
             path <- dirname(environment$baseline.work.path)
+        environment$datasets <- environment$datasets
+        environment$experiments <- environment$experiments
+        environment$origin_id <- environment$origins 
         dataset <- environment$datasets[1]
         merged.clustering <- {
         }
@@ -415,11 +418,13 @@ read.preclustered.datasets <- function(environment, path = NA, recursive = T, re
         }
         union.genes.filter <- {
         }
+        merged.dataset.ids <- {
+        }
         dataset.genes <- NA
         sample.index <- 1
         for (sample.index in seq(length(environment$datasets))) {
             dataset <- environment$datasets[sample.index]
-            origin <- environment$origins[sample.index]
+            origin <- environment$origin_id[sample.index]
             experiment <- environment$experiments[sample.index]
             data.files <- list.files(path = file.path(path, dataset), pattern = "clustering.rds",
                 full.names = T, recursive = recursive)
@@ -476,6 +481,9 @@ read.preclustered.datasets <- function(environment, path = NA, recursive = T, re
             counts <- precomputed$counts
             normalized <- precomputed$normalized
             genes.filter <- precomputed$genes.filter
+            dataset.labels <- precomputed$dataset.labels
+            dataset_ids <- precomputed$dataset_ids
+            origin_id <- precomputed$origin_id
             rm(precomputed)
 
             colnames(counts) <- colnames(normalized) <- rep(dataset, ncol(normalized))
@@ -513,7 +521,8 @@ read.preclustered.datasets <- function(environment, path = NA, recursive = T, re
                 stop("Feature genes mismatch - need to correct dataset binding matching")
             merged.counts <- cbind(merged.counts, counts)
             merged.normalized <- cbind(merged.normalized, normalized)
-            merged.dataset.labels <- c(merged.dataset.labels, rep(dataset, ncol(normalized)))
+            merged.dataset.ids <- c(merged.dataset.ids, dataset_ids)
+            merged.dataset.labels <- c(merged.dataset.labels, dataset.labels)
             merged.origins <- c(merged.origins, rep(origin, ncol(normalized)))
             merged.experiments <- c(merged.experiments, rep(experiment, ncol(normalized)))
             precomputed <- readRDS(file.path(dirname(data.files[file.index]), "cluster.names.rds"))
@@ -558,11 +567,13 @@ read.preclustered.datasets <- function(environment, path = NA, recursive = T, re
         print(table(merged.origins))
         print(table(merged.experiments))
         print(table(merged.clustering))
+        print(table(merged.dataset.ids))
 
         genes.filter <- union.genes.filter
         counts <- merged.counts
         normalized <- merged.normalized
         dataset.labels <- merged.dataset.labels
+        dataset_ids <- merged.dataset.ids
         origins <- merged.origins
         experiments <- merged.experiments
         HVG <- merged.HVG
@@ -570,23 +581,25 @@ read.preclustered.datasets <- function(environment, path = NA, recursive = T, re
         cluster.names <- merged.cluster.names
         print.message("Saving")
         saveRDS(list(genes.filter = genes.filter, counts = counts, normalized = normalized,
-            dataset.labels = dataset.labels, origins = origins, experiments = experiments,
+            dataset.labels = dataset.labels, dataset_ids = dataset_ids, origins = origins, origin_id = origin_id, experiments = experiments,
             HVG = HVG, clustering = clustering, merged.diff.exp = merged.diff.exp,
             merged.original.clustering = merged.original.clustering, cluster.names = cluster.names),
             file = cache)
 
-        end(t)
     }
-    counts <- counts[genes.filter, ]
-    normalized <- normalized[genes.filter, ]
+    counts <- counts[names(genes.filter)[genes.filter], ]
+    normalized <- normalized[names(genes.filter)[genes.filter], ]
     HVG <- HVG[HVG %in% rownames(normalized)]
 
     environment$counts <- counts
     environment$normalized <- normalized
     environment$genes <- rownames(normalized)
+    environment$genes.filter <- genes.filter
     environment$datasets <- colnames(environment$normalized)
     environment$dataset.labels <- dataset.labels
+    environment$dataset_ids <- dataset_ids
     environment$origins <- origins
+    environment$origin_id <- origin_id
     environment$experiments <- experiments
     environment$confounders <- data.frame(nUMI = colSums(counts), nGenes = colSums(counts >
         0))

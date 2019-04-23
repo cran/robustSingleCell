@@ -29,6 +29,7 @@ run.diff.expression <- function(environment, clustering, min.fold, quantile, lab
     } else {
         print.message("Computing")
         t <- start(file.path(environment$work.path, "tracking"), split = T)
+        on.exit(end(t))
         membership <- as.vector(clustering$membership)
 
         empirical.diff <- NA
@@ -42,7 +43,7 @@ run.diff.expression <- function(environment, clustering, min.fold, quantile, lab
         if (contrast == "all") {
             contrast.groups <- rep(1, length(membership))
         } else if (contrast == "datasets") {
-            contrast.groups <- environment$datasets
+            contrast.groups <- environment$dataset.labels
         }
 
         print.message("contrast =", contrast)
@@ -91,7 +92,6 @@ run.diff.expression <- function(environment, clustering, min.fold, quantile, lab
 
         saveRDS(list(final.diff = final.diff, limma.diff = limma.diff, empirical.diff = empirical.diff,
             limma.all = limma.all), file = cache)
-        end(t)
     }
 
     return(final.diff)
@@ -138,9 +138,6 @@ get.robust.markers <- function (
     min.ratio.diff = 3,
     QValue = 0.05) {
 
-    if (check_not_slurm("get.robust.markers")) {
-        return(environment)
-    }
     indices = environment$cluster.names %in% c(cluster_group1,cluster_group2)
     measurements = environment$normalized[,indices]
     groups = environment$cluster.names[indices] %in% cluster_group1

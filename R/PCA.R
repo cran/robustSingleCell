@@ -3,7 +3,7 @@ check_not_slurm <- function(func_name) {
     slurm_msg = paste0('SLURM not detected. Please run ',
                        func_name,
                        ' on a SLURM cluster.\n')
-    cat(slurm_msg)
+    if (not_slurm) cat(slurm_msg)
     return(not_slurm)
 }
 
@@ -80,7 +80,7 @@ PCA <- function(environment, regress = NA, groups = NA, nShuffleRuns = 10, thres
     } else {
         print.message("Computing")
         t <- start(file.path(environment$work.path, "tracking"))
-
+        on.exit(end(t))
         if (clear.previously.calculated.clustering)
             unlink(file.path(environment$res.data.path, "clustering"), recursive = T,
                 force = T)
@@ -94,7 +94,7 @@ PCA <- function(environment, regress = NA, groups = NA, nShuffleRuns = 10, thres
         print(dim(data))
 
         if (length(regress) > 1 || !is.na(regress)) {
-            corrected <- regress.covariates(regress, data, groups, rerun, save = T)
+            corrected <- regress.covariates(environment = environment, regress = regress, data = data, groups = groups, rerun = rerun, save = T)
             print.message("Regressed matrix")
             corner(corrected)
             data <- corrected
@@ -107,7 +107,9 @@ PCA <- function(environment, regress = NA, groups = NA, nShuffleRuns = 10, thres
         get.shuffled.var <- function(rep) {
 
             data.perm <- apply(data, 2, sample, replace = FALSE)
-            pca.perm <- stats::prcomp(t(data.perm), retx = TRUE, center = T, scale. = T)
+            data.perm <- t(data.perm)
+            data.perm <- data.perm[,apply(data.perm, 2, var) > 0]
+            pca.perm <- stats::prcomp(data.perm, retx = TRUE, center = T, scale = T)
             var.perm <- pca.perm$sdev[1:ndf]^2/sum(pca.perm$sdev[1:ndf]^2)
             saveRDS(list(pca.perm = pca.perm, var.perm = var.perm), file = file.path(shuffled.PCA.data.path,
                 paste("shuffled.PCA.rep", rep, "rds", sep = ".")))
@@ -128,7 +130,7 @@ PCA <- function(environment, regress = NA, groups = NA, nShuffleRuns = 10, thres
         }
 
         pc.time <- Sys.time()
-        pca <- stats::prcomp(t(data), retx = TRUE, center = T, scale. = T)
+        pca <- stats::prcomp(t(data), retx = TRUE, center = T, scale = T)
         print.message("Single PCA run time:")
         print(Sys.time() - pc.time)
         var <- pca$sdev[1:ndf]^2/sum(pca$sdev[1:ndf]^2)
@@ -138,14 +140,15 @@ PCA <- function(environment, regress = NA, groups = NA, nShuffleRuns = 10, thres
         var.perm <- get_slurm_out(sjob)
         dim(var.perm)
 
-        end(t)
-        start(file.path(environment$work.path, "tracking"), append = T, split = T)
+        t <- start(file.path(environment$work.path, "tracking"), append = T, split = T)
+        on.exit(end(t), add = T)
+
         if (length(var.perm) == 0 || nrow(var.perm) < nShuffleRuns) {
             print.message("JOB ERROR: Not enough shuffled results:", nrow(var.perm),
                 "<", nShuffleRuns, "\nCHECK FOR FAILED JOBS\n\n\n")
             terminate <- readline(prompt = "Terminate? (y/n) ")
             if (terminate != "n") {
-                end(t)
+                #end(t)
                 tryCatch({
                   cleanup_files(sjob)
                   cleanup_files(sjob)
@@ -154,8 +157,11 @@ PCA <- function(environment, regress = NA, groups = NA, nShuffleRuns = 10, thres
                 return(environment)
             }
         }
-        end(t)
-        start(file.path(environment$work.path, "tracking"), append = T)
+
+
+        t <- start(file.path(environment$work.path, "tracking"), append = T)
+        on.exit(end(t), add = T)
+
         tryCatch({
             cleanup_files(sjob)
             cleanup_files(sjob)
@@ -183,8 +189,6 @@ PCA <- function(environment, regress = NA, groups = NA, nShuffleRuns = 10, thres
         corner(Rotation)
 
         saveRDS(list(PCA = PCA, Rotation = Rotation), file = cache)
-
-        end(t)
     }
 
     environment$PCA <- PCA

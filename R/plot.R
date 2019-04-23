@@ -140,8 +140,9 @@ plot.cluster.stats <- function(environment, membership, label = NA, order = NA) 
         dir.create(work.path, showWarnings = F)
         file.name <- paste(label, file.name, sep = ".")
     }
+    cluster.size <- table(environment$cluster.names)
     if (length(order) == 1 && is.na(order))
-        order <- order(table(membership), decreasing = T)
+        order <- names(cluster.size)[order(cluster.size, decreasing = T)]
     grDevices::pdf(file.path(work.path, file.name), width = 8, height = 5)
     data <- data.frame(clustering = factor(membership, levels = order), Dataset = factor(environment$dataset.labels))
     if (length(unique(environment$dataset.labels)) > 1) {
@@ -162,14 +163,13 @@ plot.cluster.stats <- function(environment, membership, label = NA, order = NA) 
     }
     for (dataset in unique(environment$dataset.labels)) {
         print(ggplot(data[data$Dataset == dataset, ], aes(clustering)) + geom_bar(aes(y = (..count..)/sum(..count..))) +
-            scale_y_continuous(labels = scales::percent) + ylab("Relative frequencies") +
-            theme(axis.text.x = element_text(angle = 25, hjust = 1)) + xlab("Cluster ID") +
-            ggtitle(dataset) + theme_classic(base_size = 15))
+            scale_y_continuous(labels = scales::percent) + ylab("Relative frequencies") + theme_classic(base_size = 15) +
+            theme(axis.text.x = element_text(angle = 25, hjust = 1)) + xlab("Cluster ID") + ggtitle(dataset))
     }
-    print(ggplot(data, aes(clustering)) + geom_bar() + theme(axis.text.x = element_text(angle = 25,
-        hjust = 1)))
+    print(ggplot(data, aes(clustering)) + geom_bar() + theme_classic(base_size = 15) + theme(axis.text.x = element_text(angle = 25, hjust = 1)) +
+            ylab("Number of cells") + xlab("Cluster ID"))
     print(ggplot(data, aes(clustering)) + geom_bar(aes(y = (..count..)/sum(..count..))) +
-        scale_y_continuous(labels = scales::percent) + ylab("relative frequencies") +
+        scale_y_continuous(labels = scales::percent) + ylab("Relative frequencies") + xlab("Cluster ID") + theme_classic(base_size = 15) +
         theme(axis.text.x = element_text(angle = 25, hjust = 1)))
 
     grDevices::dev.off()
@@ -602,9 +602,7 @@ plot.heatmaps <- function(environment, diff.exp, membership, order = NA, nTopRan
 #' plot_contour_overlay_tSNE(LCMV1,genes = c('Cd4','Cd8a'))
 #' }
 plot_contour_overlay_tSNE <- function (environment,genes,perplexity = 30,max_iter = 10000,width = 10, height = 10) {
-    if (check_not_slurm("plot_contour_overlay_tSNE")) {
-        return()
-    }
+
     if (any(!genes %in% environment$genes)) {
         cat('Removing genes not found in dataset:')
         print(genes[!genes %in% environment$genes])
@@ -661,7 +659,7 @@ plot_pair_scatter <- function (environment,gene1,gene2,cluster_group1,cluster_gr
     if (check_not_slurm("plot_pair_scatter")) {
         return()
     }
-    clusters <- c(cluster_group1,cluster_group2)
+    clusters <- c(cluster_group1, cluster_group2)
     plot.data <- data.frame(gene1 = environment$normalized[gene1,environment$cluster.name %in% clusters],gene2 = environment$normalized[gene2,environment$cluster.name %in% clusters]);head(plot.data)
 
     plot.data[,1][plot.data[,1]==0] <- rnorm(sum(plot.data[,1]==0),sd = min(plot.data[,1][plot.data[,1]!=0])/5)
@@ -688,6 +686,7 @@ plot_pair_scatter <- function (environment,gene1,gene2,cluster_group1,cluster_gr
 #' @param environment \code{environment} object
 #' @param work.path where to locate the figures
 #' @param similarity similarity matrix defined in compare.cluster.similarity or get.robust.cluster.similarity
+#' @param margins The margins to the plot
 #' @export
 #' @examples
 #' \donttest{
@@ -731,7 +730,7 @@ plot_pair_scatter <- function (environment,gene1,gene2,cluster_group1,cluster_gr
 #' visualize.cluster.cors.heatmaps(pooled_env, pooled_env$work.path,
 #'                                filtered.similarity)
 #' }
-visualize.cluster.cors.heatmaps <- function(environment, work.path, similarity) {
+visualize.cluster.cors.heatmaps <- function(environment, work.path, similarity, margins = c(17, 17)) {
     if (check_not_slurm("visualize.cluster.cors.heatmaps")) {
         return()
     }
@@ -783,12 +782,12 @@ visualize.cluster.cors.heatmaps <- function(environment, work.path, similarity) 
             color.palette <- grDevices::colorRampPalette(colors)
             print(heatmap.2(similarity.matrix, col = color.palette, key = T, cexRow = 1,
                 cexCol = 1, srtCol = 45, scale = "none", density.info = "none", trace = "none",
-                Rowv = T, Colv = T, dendrogram = "both", margins = c(17, 17), cellnote = round(similarity.matrix,
+                Rowv = T, Colv = T, dendrogram = "both", margins = margins, cellnote = round(similarity.matrix,
                   1), notecol = "white", main = "Pearson Correlation Between Cluster FC"))
             print(heatmap.2(ocl.similarity.matrix, col = color.palette, key = T,
                 cexRow = 1, cexCol = 1, srtCol = 45, scale = "none", density.info = "none",
-                trace = "none", Rowv = F, Colv = F, dendrogram = "none", margins = c(17,
-                  17), cellnote = round(ocl.similarity.matrix, 1), notecol = "white",
+                trace = "none", Rowv = F, Colv = F, dendrogram = "none", margins = margins,
+                cellnote = round(ocl.similarity.matrix, 1), notecol = "white",
                 main = "Cluster mean Euclidean similarity"))
             grDevices::dev.off()
         }
@@ -801,6 +800,8 @@ visualize.cluster.cors.heatmaps <- function(environment, work.path, similarity) 
 #'
 #' @param environment \code{environment} object
 #' @param similarity similarity matrix defined in compare.cluster.similarity or get.robust.cluster.similarity
+#' @param hclust.resolution clustering resolution to impose on hclust cutree function
+#' @param margins The margins to the plot
 #' @export
 #' @examples
 #' \donttest{
@@ -841,10 +842,7 @@ visualize.cluster.cors.heatmaps <- function(environment, work.path, similarity) 
 #'    pooled_env, similarity, min.sd = qnorm(.9), max.q.val = 0.01, rerun = F)
 #' visualize.cluster.similarity.stats(pooled_env, filtered_similarity)
 #' }
-visualize.cluster.similarity.stats <- function(environment, similarity) {
-    if (check_not_slurm("visualize.cluster.similarity.stats")) {
-        return()
-    }
+visualize.cluster.similarity.stats <- function(environment, similarity,hclust.resolution = 8, margins = c(40, 40)) {
     net <- igraph::graph_from_data_frame(d = similarity[similarity$similarity > 0.1,
         c("name1", "name2")], directed = F)
     deg <- igraph::degree(net, mode = "all")
@@ -871,7 +869,7 @@ visualize.cluster.similarity.stats <- function(environment, similarity) {
     colors <- rev(RColorBrewer::brewer.pal(5, "PuOr"))
     color.palette <- grDevices::colorRampPalette(colors)
     hc.dist <- stats::hclust(stats::as.dist(1 - similarity.matrix))
-    clusters <- stats::cutree(hc.dist, k = 8)
+    clusters <- stats::cutree(hc.dist, k = hclust.resolution)
 
     clusters.ordered <- clusters[match(names(igraph::V(net)), names(clusters))]
     mark.groups <- lapply(unique(clusters.ordered), function(c) as.vector(which(clusters.ordered ==
@@ -882,10 +880,9 @@ visualize.cluster.similarity.stats <- function(environment, similarity) {
     print(gplots::heatmap.2(similarity.matrix, col = color.palette, key = T, cexRow = 3.5,
         cexCol = 3.5, scale = "none", density.info = "none", trace = "none", Rowv = stats::as.dendrogram(hc.dist),
         Colv = stats::as.dendrogram(hc.dist), dendrogram = "both", notecol = "white",
-        main = "", keysize = 1, margins = c(40, 40)))  # cellnote = round(similarity.matrix, 1), notecex = 2,
-    print(gplots::heatmap.2(similarity.matrix, col = color.palette, key = T, cexRow = 3.5,
-        cexCol = 3.5, scale = "none", density.info = "none", trace = "none", keysize = 1,
-        Rowv = T, Colv = T, dendrogram = "both", notecol = "white", main = "", margins = c(40,
-            40)))  # cellnote = round(similarity.matrix, 1), notecex = 2, main = 'Pearson Correlation Between Cluster FC'
+        main = "", keysize = 1, margins = margins, cellnote = round(similarity.matrix, 1), notecex = 2))  # 
+    # print(gplots::heatmap.2(similarity.matrix, col = color.palette, key = T, cexRow = 3.5,
+    #     cexCol = 3.5, scale = "none", density.info = "none", trace = "none", keysize = 1,
+    #     Rowv = T, Colv = T, dendrogram = "both", notecol = "white", main = "", margins = margins))  # cellnote = round(similarity.matrix, 1), notecex = 2, main = 'Pearson Correlation Between Cluster FC'
     grDevices::dev.off()
 }

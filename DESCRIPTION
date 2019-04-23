@@ -1,10 +1,11 @@
 Package: robustSingleCell
 Type: Package
 Title: Robust Clustering of Single Cell RNA-Seq Data
-Version: 0.1.0
+Version: 0.1.1
 Authors@R: 
   c(
-    person("Assaf", "Magen", email = "assaf.magen@nih.gov", role = "aut"),
+    person("Assaf", "Magen", email = "assaf.magen@nih.gov", role = c("aut", "cph"), 
+    comment = c(ORCID = "0000-0001-5473-274X")),
     person("Meng", "Wang", email = "szmamie@live.com", role = c("aut", "cre"), 
     comment = c(ORCID = "0000-0002-3453-7805")),
     person("Hao", "Chen", role = "ctb")
@@ -25,10 +26,10 @@ RoxygenNote: 6.1.1
 Suggests: GEOquery, knitr, rmarkdown, testthat
 VignetteBuilder: knitr
 NeedsCompilation: yes
-Packaged: 2019-03-28 20:55:08 UTC; szmamie
-Author: Assaf Magen [aut],
+Packaged: 2019-04-23 17:57:39 UTC; szmamie
+Author: Assaf Magen [aut, cph] (<https://orcid.org/0000-0001-5473-274X>),
   Meng Wang [aut, cre] (<https://orcid.org/0000-0002-3453-7805>),
   Hao Chen [ctb]
 Maintainer: Meng Wang <szmamie@live.com>
 Repository: CRAN
-Date/Publication: 2019-04-01 07:30:03 UTC
+Date/Publication: 2019-04-23 22:00:02 UTC

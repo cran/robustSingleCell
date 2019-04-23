@@ -6,8 +6,11 @@
 #' @param perplexity perplexity parameter of tSNE
 #' @param max_iter maximum number of iterations to run the tSNE
 #' @param rerun whether to rerun or load from cache
+#' @param local whether to run tSNE locally
+#' @param mem Memory for each job; default 4 GB
+#' @param time Time for each job; default 15 minutes
 #' @return Distributed job identified object
-run_tSNE <- function(environment, perplexity, max_iter, rerun) {
+run_tSNE <- function(environment, perplexity, max_iter, rerun, local = F, mem = "4GB", time = "0:15:00") {
 
     tSNEs.dir <- file.path(environment$res.data.path, "tSNEs")
     list.files(tSNEs.dir)
@@ -15,9 +18,10 @@ run_tSNE <- function(environment, perplexity, max_iter, rerun) {
 
     if (rerun || !dir.exists(tSNEs.dir)) {
         t <- start(file.path(environment$work.path, "tracking"), split = T)
+        on.exit(end(t))
         print(tSNEs.dir)
         # unlink(tSNEs.dir,recursive=T,force=T)
-        dir.create(tSNEs.dir)
+        dir.create(tSNEs.dir, showWarnings = F)
 
         duplicated.indices <- duplicated(t(environment$PCA))
         if (sum(duplicated.indices) > 0) {
@@ -51,11 +55,17 @@ run_tSNE <- function(environment, perplexity, max_iter, rerun) {
             }
         }
 
-        sopt <- list(mem = "4GB", time = "0:15:00", share = TRUE)
-        sjob <- slurm_apply(tSNE, params, nodes = nrow(params), cpus_per_node = 1,
-            add_objects = c("data.path", "tSNEs.dir"), submit = TRUE, slurm_options = sopt)
-        waiting <- get_slurm_out(sjob)
-        end()
+        sopt <- list(mem = mem, time = time, share = TRUE)
+
+        if (local) {
+            sjob <- slurm_apply(tSNE, params, nodes = nrow(params),
+                                add_objects = c("data.path", "tSNEs.dir"),
+                                cpus_per_node = 1, submit = FALSE, slurm_options = sopt)
+            local_slurm_array(sjob)
+        } else {
+            sjob <- slurm_apply(tSNE, params, nodes = nrow(params), cpus_per_node = 1,
+                                add_objects = c("data.path", "tSNEs.dir"), submit = TRUE, slurm_options = sopt)
+        }
     }
 
     return(sjob)

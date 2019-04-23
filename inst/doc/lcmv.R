@@ -21,7 +21,7 @@ library(robustSingleCell)
 #                            work.path = file.path(tempdir(), "LCMV/LCMV_analysis"))
 
 ## ----read_LCMV1----------------------------------------------------------
-#  LCMV1 <- read.data(LCMV1, subsample = 1000)
+#  LCMV1 <- read.data(LCMV1, subsample = 500)
 
 ## ----preprocess----------------------------------------------------------
 #  LCMV1 <- get.variable.genes(LCMV1)
@@ -33,10 +33,10 @@ library(robustSingleCell)
 #  	Exhaustion = controlled.mean.score(LCMV1, exhaustion_markers))
 
 ## ----PCA-----------------------------------------------------------------
-#  LCMV1 <- PCA(LCMV1)
+#  LCMV1 <- PCA(LCMV1, local = T)
 
 ## ----cluster-------------------------------------------------------------
-#  LCMV1 <- cluster.analysis(LCMV1)
+#  LCMV1 <- cluster.analysis(LCMV1, local = T)
 
 ## ----annotation----------------------------------------------------------
 #  types = rbind(
@@ -49,12 +49,12 @@ library(robustSingleCell)
 #                  data.frame(type='CD4', gene = c("Cd4")),
 #                  data.frame(type='Cycle',gene=c('Mki67','Top2a','Birc5'))
 #  )
-#  summarize(LCMV1)
+#  summarize(LCMV1, local = T)
 #  LCMV1_cluster_names <- get.cluster.names(LCMV1, types, min.fold = 1.0, max.Qval = 0.01)
 #  LCMV1 <- set.cluster.names(LCMV1, names = LCMV1_cluster_names)
-#  summarize(LCMV1)
+#  summarize(LCMV1, local = T)
 
-## ----plotLCMV1, include = F----------------------------------------------
+## ----plotLCMV1-----------------------------------------------------------
 #  canonical_genes <- c("Cd8a", "Cd4", "Mki67", "Foxp3", "Il2ra", "Bcl6",
 #                       "Cxcr5", "Cxcr6", "Ifng", "Tbx21", "Id2", "Rora",
 #                       "Cxcr3", "Tcf7", "Ccr7", "Cxcr4", "Pdcd1", "Ctla4")
@@ -66,7 +66,7 @@ library(robustSingleCell)
 #                            experiments = "Rep2",
 #                            data.path = file.path(tempdir(), "LCMV"),
 #                            work.path = file.path(tempdir(), "LCMV/LCMV_analysis"))
-#  LCMV2 <- read.data(LCMV2, subsample = 1000)
+#  LCMV2 <- read.data(LCMV2, subsample = 500)
 #  LCMV2 <- get.variable.genes(LCMV2)
 #  LCMV2 <- add.confounder.variables(
 #    LCMV2,
@@ -75,19 +75,17 @@ library(robustSingleCell)
 #    cell.cycle.score = cell.cycle.score(LCMV2),
 #    Exhaustion = controlled.mean.score(LCMV2, exhaustion_markers))
 #  
-#  LCMV2 <- PCA(LCMV2)
-#  LCMV2 <- cluster.analysis(LCMV2)
-#  summarize(LCMV2)
+#  LCMV2 <- PCA(LCMV2, local = T)
+#  LCMV2 <- cluster.analysis(LCMV2, local = T) # 0.05 for KNN ratio
+#  summarize(LCMV2, local = T)
 #  LCMV2_cluster_names <- get.cluster.names(LCMV2, types, min.fold = 1.0, max.Qval = 0.01)
 #  LCMV2 <- set.cluster.names(LCMV2, names = LCMV2_cluster_names)
-#  summarize(LCMV2)
-
-## ----plotLCMV2, include = F----------------------------------------------
+#  summarize(LCMV2, local = T)
 #  plot_simple_heatmap(LCMV2, name = "canonical", markers = canonical_genes, main = "Expression of marker genes")
 
 ## ----initialize_pooled---------------------------------------------------
 #  pooled_env <- initialize.project(datasets = c("LCMV1", "LCMV2"),
-#                            origins = rep("CD44+ cells", 2),
+#                            origins = c("CD44+ cells", "CD44+ cells"),
 #                            experiments = c("Rep1", "Rep2"),
 #                            data.path = file.path(tempdir(), "LCMV"),
 #                            work.path = file.path(tempdir(), "LCMV/LCMV_analysis"))
@@ -98,8 +96,8 @@ library(robustSingleCell)
 #    mitochondrial.score = mitochondrial.score(pooled_env),
 #    cell.cycle.score = cell.cycle.score(pooled_env),
 #    Exhaustion = controlled.mean.score(pooled_env, exhaustion_markers))
-#  pooled_env <- PCA(pooled_env, clear.previously.calculated.clustering = F)
-#  summarize(pooled_env, contrast = "datasets")
+#  pooled_env <- PCA(pooled_env, clear.previously.calculated.clustering = F, local = T)
+#  summarize(pooled_env, contrast = "datasets", local = T)
 
 ## ----pooled--------------------------------------------------------------
 #  cluster.similarity <- assess.cluster.similarity(pooled_env)
@@ -116,4 +114,19 @@ library(robustSingleCell)
 ## ----summary-------------------------------------------------------------
 #  similarity <- filtered.similarity
 #  visualize.cluster.similarity.stats(pooled_env, similarity)
+
+## ----robust_markers------------------------------------------------------
+#  differential.expression.statistics = get.robust.markers(
+#     pooled_env, cluster_group1 = c('LCMV2_Tfh_CD4', 'LCMV2_Tfh_Tcmp_CD4'),
+#     cluster_group2 = c('LCMV2_CD8_1', 'LCMV2_CD8_2'),
+#     group1_label = 'CD4 T Cells', group2_label = 'CD8 T Cells')
+
+## ----tSNE_overlay--------------------------------------------------------
+#  plot_contour_overlay_tSNE(pooled_env, genes = c('Cd4','Cd8a'))
+
+## ------------------------------------------------------------------------
+#  plot_pair_scatter(pooled_env, gene1 = 'Cd4', gene2 = 'Cd8a',
+#     cluster_group1 = c('LCMV2_Tfh_CD4', 'LCMV2_Tfh_Tcmp_CD4'),
+#     cluster_group2 = c('LCMV2_CD8_1','LCMV2_CD8_2'),
+#     group1_label = 'CD4 T Cells', group2_label = 'CD8 T Cells')
 

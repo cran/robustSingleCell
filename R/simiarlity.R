@@ -55,9 +55,6 @@
 get.robust.cluster.similarity <- function(environment, similarity, min.sd = stats::qnorm(0.95),
     max.q.val = 0.01, rerun = F) {
 
-    if (check_not_slurm("get.robust.cluster.similarity")) {
-        return(environment)
-    }
     cache <- file.path(environment$res.data.path, "filtered.cluster.similarity.rds")
     if (!rerun && file.exists(cache)) {
         print.message("Loading precomputed similarity")
@@ -68,7 +65,7 @@ get.robust.cluster.similarity <- function(environment, similarity, min.sd = stat
 
         match.significance.stats <- {
         }
-        origin <- unique(similarity$origin1)[2]
+        origin <- unique(similarity$origin1)[1]
         origins <- sort(unique(c(as.vector(similarity$origin1), as.vector(similarity$origin2))))
         for (origin in origins) {
             filter <- similarity$origin1 == origin & similarity$origin2 == origin &
@@ -95,22 +92,19 @@ get.robust.cluster.similarity <- function(environment, similarity, min.sd = stat
         plot.data <- data.frame(correlation = match.significance.stats$cor.val, SD = match.significance.stats$sd.dist,
             origin = match.significance.stats$origin)
         grDevices::pdf(file.path(work.path, "cluster.matching.similarity.histogram.pdf"))
-        print(ggplot(plot.data, aes(x = correlation, fill = origin)) + geom_density(alpha = 0.5) +
-            theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-                panel.background = element_blank(), axis.line = element_line(colour = "black")) +
-            ylab("Density") + theme_classic(base_size = 25))
         print(ggplot(plot.data, aes(x = SD, fill = origin)) + geom_density(alpha = 0.5) +
             geom_vline(xintercept = min.sd) + theme(panel.grid.major = element_blank(),
             panel.grid.minor = element_blank(), panel.background = element_blank(),
-            axis.line = element_line(colour = "black")) + ylab("Density") + theme_classic(base_size = 25))
+            axis.line = element_line(colour = "black"), legend.position = "bottom") + ylab("Density") + theme_classic(base_size = 25))
+        print(ggplot(plot.data, aes(x = correlation, fill = origin)) + geom_density(alpha = 0.5) +
+            theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+                panel.background = element_blank(), axis.line = element_line(colour = "black"), legend.position = "bottom") + ylab("Density") + theme_classic(base_size = 25))
+        print(ggplot(plot.data, aes(x = SD)) + geom_density(alpha = 0.5) + geom_vline(xintercept = min.sd) +
+            theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+                panel.background = element_blank(), axis.line = element_line(colour = "black"), legend.position = "bottom") + ylab("Density") + theme_classic(base_size = 25))
         print(ggplot(plot.data, aes(x = correlation)) + geom_density(alpha = 0.5) +
             theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-                panel.background = element_blank(), axis.line = element_line(colour = "black")) +
-            ylab("Density") + theme_classic(base_size = 25))
-        print(ggplot(plot.data, aes(x = SD)) + geom_density(alpha = 0.5) + geom_vline(xintercept = 2) +
-            theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-                panel.background = element_blank(), axis.line = element_line(colour = "black")) +
-            ylab("Density") + theme_classic(base_size = 25))
+                panel.background = element_blank(), axis.line = element_line(colour = "black"), legend.position = "bottom") + ylab("Density") + theme_classic(base_size = 25))
         grDevices::dev.off()
 
         sum(match.significance.stats$sd.dist >= min.sd)/length(match.significance.stats$sd.dist)
@@ -288,9 +282,9 @@ pearson.correlation <- function(diff1, diff2) {
 assess.cluster.similarity <- function(environment, diff.exp.file = "main.datasets.diff.exp.rds",
     cluster.similarity.function = pearson.correlation, label = "pearson", rerun = F) {
 
-    if (check_not_slurm("assess.cluster.similarity")) {
-        return(environment)
-    }
+    # if (check_not_slurm("assess.cluster.similarity")) {
+    #     return(environment)
+    # }
     cache <- file.path(environment$res.data.path, paste(label, "cluster.similarity.rds",
         sep = "."))
     if (!rerun && file.exists(cache)) {
@@ -302,7 +296,7 @@ assess.cluster.similarity <- function(environment, diff.exp.file = "main.dataset
     } else {
         print.message("Computing")
         t <- start(file.path(environment$work.path, "tracking"), split = F)
-
+        on.exit(end(t))
         name <- paste("assess.cluster.similarity", label, sep = "_")
         work.path <- file.path(environment$work.path, name)
         if (file.exists(work.path)) {
@@ -323,7 +317,7 @@ assess.cluster.similarity <- function(environment, diff.exp.file = "main.dataset
         clusters <- sort(unique(membership))
         map <- data.frame(t(sapply(clusters, function(c) c(unique(environment$cluster.names[membership ==
             c][1]), unique(environment$origins[membership == c][1]), unique(environment$experiments[membership ==
-            c][1]), unique(environment$datasets[membership == c][1]), unique(original.membership[membership ==
+            c][1]), unique(environment$dataset.labels[membership == c][1]), unique(original.membership[membership ==
             c][1]), c))))
         colnames(map) <- c("name", "origin", "experiments", "sample", "original.membership",
             "membership")
@@ -334,8 +328,8 @@ assess.cluster.similarity <- function(environment, diff.exp.file = "main.dataset
         for (cluster.index in seq(nclusters)) {
             cluster <- clusters[cluster.index]
             indices <- membership == cluster
-            diff.exp.indices <- configs == paste(environment$datasets[indices][1],
-                membership[indices][1], sep = "_ ") | configs == paste(environment$datasets[indices][1],
+            diff.exp.indices <- configs == paste(environment$dataset.labels[indices][1],
+                membership[indices][1], sep = "_ ") | configs == paste(environment$dataset.labels[indices][1],
                 membership[indices][1], sep = "_")
             diff <- final.diff[diff.exp.indices, ]
             rownames(diff) <- diff$gene
@@ -363,8 +357,8 @@ assess.cluster.similarity <- function(environment, diff.exp.file = "main.dataset
         for (cluster.index1 in seq(nclusters - 1)) {
             cluster1 <- clusters[cluster.index1]
             indices <- membership == cluster1
-            diff.exp.indices1 <- configs == paste(environment$datasets[indices][1],
-                membership[indices][1], sep = "_ ") | configs == paste(environment$datasets[indices][1],
+            diff.exp.indices1 <- configs == paste(environment$dataset.labels[indices][1],
+                membership[indices][1], sep = "_ ") | configs == paste(environment$dataset.labels[indices][1],
                 membership[indices][1], sep = "_")
             diff1 <- final.diff[diff.exp.indices1, ]
             rownames(diff1) <- diff1$gene
@@ -373,8 +367,8 @@ assess.cluster.similarity <- function(environment, diff.exp.file = "main.dataset
             for (cluster.index2 in (cluster.index1 + 1):nclusters) {
                 cluster2 <- clusters[cluster.index2]
                 indices <- membership == cluster2
-                diff.exp.indices2 <- configs == paste(environment$datasets[indices][1],
-                  membership[indices][1], sep = "_ ") | configs == paste(environment$datasets[indices][1],
+                diff.exp.indices2 <- configs == paste(environment$dataset.labels[indices][1],
+                  membership[indices][1], sep = "_ ") | configs == paste(environment$dataset.labels[indices][1],
                   membership[indices][1], sep = "_")
                 diff2 <- final.diff[diff.exp.indices2, ]
                 rownames(diff2) <- diff2$gene
@@ -519,7 +513,7 @@ assess.cluster.similarity <- function(environment, diff.exp.file = "main.dataset
         grDevices::dev.off()
 
         saveRDS(list(similarity = similarity, map = map), file = cache)
-        end(t)
+
     }
 
     return(list(map = map, similarity = similarity))
